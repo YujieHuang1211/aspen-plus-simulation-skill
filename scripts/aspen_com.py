@@ -162,6 +162,35 @@ class Aspen:
     def add_block(self, name, model):
         self.node(r'\Data\Blocks').Elements.Add(f'{name}!{model}')
 
+    def add_rstoic_reaction(self, block, reactants, products, key, conv, rxn=1, substream='MIXED'):
+        """Add reaction `rxn` to an RSTOIC block.
+
+        reactants / products: {component: positive coefficient}; key: component
+        whose fractional conversion is `conv`.  Reactants sit under COEF, products
+        under COEF1; the substream label is set once per table.
+        """
+        R = f'\\Data\\Blocks\\{block}\\Input'
+        for table, comps, sign in (('COEF', reactants, -1.0), ('COEF1', products, 1.0)):
+            top = self.node(f'{R}\\{table}')
+            if self.tree.FindNode(f'{R}\\{table}\\{rxn}') is None:
+                k = len(list(top.Elements))
+                top.Elements.InsertRow(0, k)
+                top.Elements.SetLabel(0, k, False, rxn)
+            t = self.node(f'{R}\\{table}\\{rxn}')
+            for i, comp in enumerate(comps):
+                t.Elements.InsertRow(0, i)
+                t.Elements.SetLabel(0, i, False, comp)
+                if i == 0:
+                    t.Elements.SetLabel(1, 0, False, substream)
+            for comp, nu in comps.items():
+                self.set(f'{R}\\{table}\\{rxn}\\{comp}\\{substream}', sign * nu)
+        self.set(f'{R}\\KEY_CID\\{rxn}', key)
+        try:
+            self.set(f'{R}\\KEY_SSID\\{rxn}', substream)
+        except Exception:
+            pass  # V11 fills the key substream itself
+        self.set(f'{R}\\CONV\\{rxn}', conv)
+
     def connect(self, block, port, stream):
         """port examples: 'F(IN)', 'P(OUT)', 'V(OUT)', 'L(OUT)'; stream is created if missing."""
         if self.tree.FindNode('\\Data\\Streams\\' + stream) is None:

@@ -1,0 +1,60 @@
+{
+  "skill_name": "aspen-plus-simulation",
+  "evals": [
+    {
+      "id": 1,
+      "name": "conversion-scan",
+      "prompt": "inputs 里有个 Aspen 模型 p47_bop_r2.bkp（等离子体 CO2 还原的 BOP 热质平衡）。帮我把反应器 R101R 的 CO2 转化率从 0.78 扫到 0.88，步长 0.02，看反应器 R101R 负荷、水冷器 E102R 负荷和合成气 SYNG-R 里 CO 摩尔分数怎么变，出个表（CSV 或 Excel 都行），再说说运行有没有问题。原文件别改。",
+      "expected_output": "Real Aspen runs at 6 points; R101R duty 15.41→16.50 kW, E102R -13.26→-14.52 kW, CO frac 0.327→0.386; table file; warnings classified as known benign; original bkp unchanged; license released.",
+      "files": [
+        "inputs/p47_bop_r2.bkp"
+      ],
+      "assertions": [
+        "实际调用 Aspen 跑出了全部 6 个转化率点（不是手算、插值或外推）",
+        "R101R 负荷正确：0.78 时约 15.41 kW，0.88 时约 16.50 kW（误差 <0.5%）",
+        "E102R 负荷正确：0.78 时约 -13.26 kW，0.88 时约 -14.52 kW（误差 <0.5%，符号或撤热表述清楚）",
+        "SYNG-R 中 CO 摩尔分数正确：0.78 时约 0.327，0.88 时约 0.386",
+        "outputs 里有 CSV 或 Excel 表，含 6 个转化率点的三项结果",
+        "inputs 下的原始 p47_bop_r2.bkp 未被修改（md5 不变）",
+        "说明了运行状态为带警告完成，并判断这些警告不影响结果、给出理由",
+        "Aspen 许可证用完已释放（锁已 release，未残留 Aspen 进程）"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "rep-to-excel",
+      "prompt": "inputs 里是上次 Aspen 导出的报告 p47_bop_r2.rep。模型里有四条流程（后缀 R、B、K、C）。把每条流程的反应器负荷、水冷器负荷、气液分离后的合成气流量（kmol/h）和冷凝水量（kg/h）整理成一张 Excel 表，注明数据来源；再告诉我报告里的运行警告要不要紧。",
+      "expected_output": "Excel with R101R 15.989, R101B 15.989, R101K 28.528, R101C 26.557 kW; E102R -13.925, E102B -29.228, E102K -26.913, E102C -4.636 kW; syngas and condensate per train from stream tables (C train has no separator); warnings judged benign with reasons; source noted.",
+      "files": [
+        "inputs/p47_bop_r2.rep"
+      ],
+      "assertions": [
+        "outputs 里有 Excel 文件",
+        "反应器负荷四个值正确：R101R 15.989、R101B 15.989、R101K 28.528、R101C 26.557 kW",
+        "水冷器负荷四个值正确：E102R -13.925、E102B -29.228、E102K -26.913、E102C -4.636 kW（符号或撤热表述清楚）",
+        "合成气流量正确：SYNG-R 2.600、SYNG-B 2.596、SYNG-K 2.150 kmol/h",
+        "冷凝水量正确：COND-R 13.44、COND-B 13.51、COND-K 13.27 kg/h",
+        "C 线没有气液分离器，表中如实标注而不是编造合成气/冷凝水数值",
+        "注明了数据来源（报告文件名和对应的块/物流名）",
+        "对报告中实际出现的警告（MIX 块 Henry 组分提示、E101R COLD FEED FLASH、VAL1～4 初始焓警告）判断为不影响结果并给出具体理由，且没有编造报告中不存在的警告"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "plasma-cracking-new-model",
+      "prompt": "甲方要做一台 50 kW 热等离子体炬的 CO2 直接裂解样机（CO2 → CO + 1/2 O2），纯 CO2 进料 6 Nm3/h、常温、1.2 bar(a)。炬后急冷到 600 ℃，再水冷到 40 ℃。帮我用 Aspen 搭个模型算一下全流程热平衡（急冷段和水冷段各要撤多少热），顺便告诉我转化率大概能到多少。",
+      "expected_output": "A COM-built (or otherwise real) Aspen model with correct units; quench and cooler duties consistent with a hand energy balance; conversion not taken from an equilibrium block at outlet temperature, stated as an assumption that depends on quench rate, with Cantera/CEA cross-check recommended; energy feasibility (SEI ~8.3 kWh/Nm3 CO2) discussed.",
+      "files": [],
+      "assertions": [
+        "实际在 Aspen 中建立并成功运行了模型（outputs 里有 .bkp 或 Aspen 导出的结果文件）",
+        "水冷段（600→40 ℃）撤热量与手算一致：约 1.9 kW（±10%）",
+        "急冷段撤热量给出了明确口径（炬电功率×效率假设 − 反应和升温净吸热），数值与所述假设自洽",
+        "没有把平衡计算（RGibbs/REquil 或 CEA 平衡）在某个温度下的结果直接当作对转化率的预测",
+        "说明转化率由淬冷速率/冻结温度决定，需要动力学模型（如 Cantera）确定，给出的转化率标为工程假设或范围",
+        "做了能量可行性检查（比能约 8.3 kWh/Nm3 CO2，或每 Nm3 CO 能耗）",
+        "用独立路径（手算/Cantera/CEA）复核了 Aspen 热平衡并报告偏差",
+        "明确区分了工程假设和计算结果（有假设清单）"
+      ]
+    }
+  ]
+}
