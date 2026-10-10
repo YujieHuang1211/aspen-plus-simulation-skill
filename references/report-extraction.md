@@ -12,7 +12,7 @@ COM 可用时，优先直接读节点（`aspen_com.py` 的 `get()`），同时�
 |---|---|---|---|
 | `.rep` | GUI：File → Export → Report；COM：`Export(2, path)` | 全部块的输入回显和结果、全部物流表、运行状态 | 主要取数来源，人也能直接读 |
 | `.sum` | GUI：Export → Summary；COM：`Export(3, path)` | 机器格式的结果摘要 | 很少直接用；需要大量物流数据时比 .rep 好解析，但格式没有文档 |
-| `.his` | SaveAs 或运行时自动生成在 .bkp 同目录 | 运行历史，含 Control Panel 的全部 Warning / Error 原文 | 警告清单，`aspen_com.py` 的 `warnings()` 读的就是它 |
+| `.his` | 运行时引擎在工作目录写临时的 `_<随机名>.his`（关闭文档时删除）；SaveAs 在 .bkp 旁写 `<名>.his` | 运行历史，含 Control Panel 的全部 Warning / Error 原文 | 警告清单，`aspen_com.py` 的 `warnings()` 读的就是它 |
 
 ## 3. .rep 的格式要点（V11 实测）
 

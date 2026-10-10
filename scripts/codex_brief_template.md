@@ -6,7 +6,8 @@ COM（`Apwn.Document.IP`）可用时，GUI 只剩两件事要做：把手写的 
 
 - Codex 桌面版开着时，它常驻的 `node_repl.exe` 会占住文件，`codex exec` 初始化沙箱时报 os error 32，computer use 起不来。先请用户关掉 Codex 桌面版。
 - 本机 Windows 沙箱初始化也失败过（`windows sandbox failed: helper_unknown_error: setup refresh had errors`），P47 是用户授权后以 `danger-full-access` 运行才成功的。不要自己提权，先问用户。
-- 一次只开一个 Aspen 实例，运行前确认没有 COM 脚本占着许可证。
+- 一次只开一个 Aspen 实例，运行前确认没有 COM 脚本占着许可证；有其他任务也在用 Aspen 时，先 `python scripts/aspen_lock.py acquire <任务名>` 排队，结束后 release。
+- 本机 Codex 做只读送审时，需要加 `-c windows.sandbox="unelevated"` 才能读文件（P47 汇报 PPT 送审时确认）。computer use 加这个参数能否成功没有验证过，P47 的 computer use 是在 `danger-full-access` 下跑通的。G: 盘（Google Drive）上的文件先拷到 E: 本地再交给 Codex，沙箱在 G: 上会静默失败。
 
 `<尖括号>` 内的内容按项目替换。
 

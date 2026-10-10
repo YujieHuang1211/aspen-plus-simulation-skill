@@ -25,11 +25,15 @@ Facts that cost time to find out:
   lbmol/hr) and only defines ENG, MET and SI; METCBAR does not exist in a
   blank document.  Call set_units('MET') first: K, atm, kmol/hr, cal/sec.
   Check unit() on anything you set before trusting it.
-- Results are not reloaded from a .bkp; run() again after opening.
+- A .bkp opens with the results it was saved with (GUI- and COM-saved alike),
+  and set() does not clear them: after changing an input, get() still returns
+  the old value until run().  Always run() before reading results.
 - Export codes: 1 bkp, 2 rep, 3 sum, 4 inp, 6 cpm (empty under COM).
   Aspen appends the extension itself, so pass the path without one.
-- The run history (<name>.his next to the saved file, or the engine's work
-  dir) contains the full Control Panel warning text.
+- The run history .his holds the full Control Panel warning text.  A run
+  writes _<random>.his (and ~30 other temp files) into the engine work dir,
+  all deleted on Close(); save_as() writes <name>.his next to the .bkp.
+  Read warnings() before closing.
 - One document per Python process: after Close(), a second Dispatch of the
   in-process server in the same process fails with "operation not
   supported".  Run each model (or each case batch) in its own subprocess.
@@ -124,10 +128,19 @@ class Aspen:
         self.set(r'\Data\Setup\Global\Input\OUTSET', unit_set)
 
     def run(self):
-        t = time.time()
+        """Run and classify.  'trusted' is False when the run produced no
+        results, reported an error, or a component lacks basic properties
+        (e.g. "MW MISSING FOR COMPONENT X" when a databank name is wrong):
+        such a run can still return numbers, and they are wrong."""
+        t = self._last_run = time.time()
         self.doc.Engine.Run2()
         code = self.get(r'\Data\Results Summary\Run-Status\Output\UOSSTAT2')
-        return {'status_code': code, 'status': UOSSTAT.get(code, 'check warnings()'),
+        msgs = self.warnings()
+        errors = [m for m in msgs if re.search(r'^\*{2,}\s+(SEVERE |TERMINAL )?ERROR', m)]
+        missing = [m for m in msgs if re.search(r'MISSING FOR COMPONENT|PARAMETER .* IS MISSING', m)]
+        return {'status_code': code, 'status': UOSSTAT.get(code, 'no results / failed'),
+                'trusted': code in UOSSTAT and not errors and not missing,
+                'errors': errors, 'missing_properties': missing,
                 'seconds': round(time.time() - t, 1)}
 
     def export(self, kind, path_without_ext):
@@ -139,18 +152,43 @@ class Aspen:
         self.path = os.path.abspath(bkp)
 
     def warnings(self):
-        """Warning/error paragraphs from the newest .his next to the model."""
-        d = os.path.dirname(self.path) if self.path else os.getcwd()
-        his = sorted(glob.glob(os.path.join(d, '*.his')), key=os.path.getmtime)
+        """Warning/error paragraphs of this document's latest run or save.
+
+        A run writes _<random>.his into the engine work dir (deleted on Close);
+        save_as() writes <name>.his next to the saved file.  Candidates are
+        this model's own <name>.his and engine temp files (_*.his) touched
+        since the last run(); any other .his in the folder belongs to another
+        model and is ignored.  Only one Aspen runs at a time (single seat), so
+        a fresh temp .his is ours.  Call before close().
+        """
+        own = os.path.splitext(self.path)[0] + '.his' if self.path else None
+        since = getattr(self, '_last_run', None)
+        dirs = {os.getcwd()} | ({os.path.dirname(self.path)} if self.path else set())
+        his = []
+        for d in dirs:
+            for f in glob.glob(os.path.join(d, '*.his')):
+                mine = own and os.path.normcase(f) == os.path.normcase(own)
+                temp = os.path.basename(f).startswith('_')
+                fresh = since is None or os.path.getmtime(f) >= since - 1
+                if (mine or (temp and since is not None)) and fresh:
+                    his.append(f)
         if not his:
             return []
+        his.sort(key=os.path.getmtime)
         txt = open(his[-1], encoding='latin-1').read()
         return [m.group(0).strip() for m in
                 re.finditer(r'\n +\*+ +(?:SEVERE |TERMINAL )?(?:WARNING|ERROR)[^\n]*(?:\n {6,}[^\n*]+)*', txt)]
 
     # ------------------------------------------------------------- build helpers
     def add_components(self, *ids):
-        """ids as (alias, databank_name) or plain names."""
+        """ids as (alias, databank_name) or plain names.
+
+        databank_name must be the databank's component name (METHANOL,
+        WATER, CARBON-DIOXIDE) or its exact formula as stored there (H2O,
+        CO2, CH4O).  A non-matching name such as 'CH3OH' is accepted here
+        without complaint; the run then reports "MW MISSING FOR COMPONENT"
+        and run()['trusted'] is False.
+        """
         comp = self.node(r'\Data\Components\Specifications\Input\TYPE')
         n0 = len(list(comp.Elements))
         for i, c in enumerate(ids):
@@ -162,12 +200,24 @@ class Aspen:
     def add_block(self, name, model):
         self.node(r'\Data\Blocks').Elements.Add(f'{name}!{model}')
 
-    def add_rstoic_reaction(self, block, reactants, products, key, conv, rxn=1, substream='MIXED'):
-        """Add reaction `rxn` to an RSTOIC block.
+    def options(self, path):
+        """Allowed keyword values of an option node, e.g. RGibbs PROD_SPEC ->
+        ['SYSTEM', 'PRODUCTS', 'PHASES'].  Use it instead of guessing keywords."""
+        try:
+            return [e.Value if e.Value is not None else e.Name
+                    for e in self.node(path).AttributeValue(5).Elements]
+        except Exception:
+            return []
 
-        reactants / products: {component: positive coefficient}; key: component
-        whose fractional conversion is `conv`.  Reactants sit under COEF, products
-        under COEF1; the substream label is set once per table.
+    def add_reaction(self, block, reactants, products, rxn=1, key=None, conv=None, substream='MIXED'):
+        """Add reaction `rxn` to an RSTOIC or REQUIL block.
+
+        reactants / products: {component: positive coefficient}.  Reactants go
+        under COEF, products under COEF1.  RSTOIC tables are component x
+        substream (the substream label is set once per table); REQUIL tables
+        are one-dimensional (component only).  The layout is read from the
+        table itself.  key / conv: fractional conversion (RSTOIC only; REQUIL
+        computes the extent from equilibrium).
         """
         R = f'\\Data\\Blocks\\{block}\\Input'
         for table, comps, sign in (('COEF', reactants, -1.0), ('COEF1', products, 1.0)):
@@ -177,19 +227,27 @@ class Aspen:
                 top.Elements.InsertRow(0, k)
                 top.Elements.SetLabel(0, k, False, rxn)
             t = self.node(f'{R}\\{table}\\{rxn}')
+            two_d = t.Elements.Dimension == 2
             for i, comp in enumerate(comps):
                 t.Elements.InsertRow(0, i)
                 t.Elements.SetLabel(0, i, False, comp)
-                if i == 0:
+                if two_d and i == 0:
                     t.Elements.SetLabel(1, 0, False, substream)
             for comp, nu in comps.items():
-                self.set(f'{R}\\{table}\\{rxn}\\{comp}\\{substream}', sign * nu)
-        self.set(f'{R}\\KEY_CID\\{rxn}', key)
-        try:
-            self.set(f'{R}\\KEY_SSID\\{rxn}', substream)
-        except Exception:
-            pass  # V11 fills the key substream itself
-        self.set(f'{R}\\CONV\\{rxn}', conv)
+                leaf = f'{R}\\{table}\\{rxn}\\{comp}' + (f'\\{substream}' if two_d else '')
+                self.set(leaf, sign * nu)
+        if key is not None:
+            self.set(f'{R}\\KEY_CID\\{rxn}', key)
+            try:
+                self.set(f'{R}\\KEY_SSID\\{rxn}', substream)
+            except Exception:
+                pass  # V11 fills the key substream itself
+        if conv is not None:
+            self.set(f'{R}\\CONV\\{rxn}', conv)
+
+    def add_rstoic_reaction(self, block, reactants, products, key, conv, rxn=1, substream='MIXED'):
+        """RSTOIC reaction with a fractional conversion (kept for older scripts)."""
+        self.add_reaction(block, reactants, products, rxn=rxn, key=key, conv=conv, substream=substream)
 
     def connect(self, block, port, stream):
         """port examples: 'F(IN)', 'P(OUT)', 'V(OUT)', 'L(OUT)'; stream is created if missing."""
