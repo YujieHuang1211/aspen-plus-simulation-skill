@@ -23,7 +23,7 @@
 
 1. 用户或以前的项目已经有 .bkp：复制一份再用，不要直接改原件。
 2. 手写 .inp（关键字格式，见 `model-building.md` §1），在 GUI 里打开一次，另存为 .bkp。这一步可以交给用户手动做（1 分钟），也可以用 `codex_brief_template.md` 交给 Codex computer use。
-3. 完全用 COM 从空白文档搭（`add_components / add_block / connect`）。适合小流程；大流程逐个节点写很啰嗦，不如走第 2 条。
+3. 完全用 COM 从空白文档搭（`add_components / add_block / connect`，RStoic 反应式用 `add_rstoic_reaction`）。适合小流程；大流程逐个节点写很啰嗦，不如走第 2 条。RStoic 的反应式分在两张表里（反应物在 `Input\COEF`，产物在 `Input\COEF1`，要先插行、设标签再填系数），没有 helper 时要摸索好几轮。
 
 `.inp` 不能直接喂给 COM：`InitFromArchive2` 和 `InitFromFile2` 都会报 `Unable to open file`，因为 .inp 的翻译要过命令行引擎，而引擎拿不到许可证。翻译中途会在目录里留下一个约 10 KB 的残缺 .bkp，它也打不开，直接删掉。
 
@@ -69,6 +69,7 @@
 | FLASH2 气相分率 | `\Data\Blocks\<B>\Output\B_VFRAC` |
 | HEATER 设定温度 / 压力 | `\Data\Blocks\<B>\Input\TEMP`、`...\Input\PRES` |
 | RSTOIC 第 1 个反应的转化率 | `\Data\Blocks\<B>\Input\CONV\1` |
+| RSTOIC 反应式系数 | 反应物 `...\Input\COEF\<反应号>\<组分>\MIXED`（负值），产物 `...\Input\COEF1\<反应号>\<组分>\MIXED`；关键组分 `...\Input\KEY_CID\<反应号>` |
 | 全局物性方法 | `\Data\Properties\Specifications\Input\GBASEOPSET` |
 | 输入 / 输出单位集 | `\Data\Setup\Global\Input\INSET`、`...\OUTSET` |
 
