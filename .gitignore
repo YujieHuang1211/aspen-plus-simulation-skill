@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+.aspen_lock/
+aspen_lock.log

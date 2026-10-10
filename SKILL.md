@@ -91,4 +91,5 @@ COM 驱动最容易出错的几处（细节见 `com-automation.md` §3）：
 - `scripts/probe_aspen_com.py`：探测 COM 入口，带超时，给出诊断和下一步
 - `scripts/aspen_com.py`：COM 驱动（打开 / 新建、改值、运行、导出、读警告、浏览节点、扫描）
 - `scripts/parse_rep_template.py`：解析 .rep，输出块结果和物流表 CSV
+- `scripts/aspen_lock.py`：单许可证排队锁；同时有多个代理或脚本要用 Aspen 时，每个任务前后 acquire / release
 - `scripts/codex_brief_template.md`：需要 GUI 时交给 Codex computer use 的任务书模板和调用前检查

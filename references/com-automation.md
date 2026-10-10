@@ -38,6 +38,7 @@
 | 一个进程只能开一个文档 | `Close()` 之后同一 Python 进程里再 Dispatch，报 "operation not supported" | 每个模型、每批工况各起一个子进程 |
 | .bkp 不带结果 | 打开 .bkp 后直接读 Output 节点，得到 None | 打开后先 `run()` |
 | 许可证只有一个席位 | 脚本没 Close 就崩了，GUI 打不开 | 用 `with Aspen(...) as ap:`；脚本崩了就结束 python 进程。运行前确认用户没开着 GUI |
+| 多个子代理或脚本同时要用 Aspen | 互相抢许可证，某个运行随机失败 | 每个用 Aspen 的任务前后调用 `scripts/aspen_lock.py acquire/release <任务名>` 排队。代理中途死掉时锁会留着，确认对应进程已结束后用同一任务名手动 release |
 | 进程外 Dispatch 超时后留下孤儿进程 | 任务管理器里多一个 AspenPlus.exe | 它通常会自己退出；没退出、又确认不是用户开的 GUI，再结束它 |
 | `Visible` 属性 | 进程内对象设置 `Visible` 会抛异常 | 不要设 |
 | `SuppressDialogs` | 不设时，运行中弹框会把脚本挂住 | 打开文档后立刻设为 1（驱动脚本已处理） |
